@@ -29,8 +29,8 @@ occaKernel void jacobi(occaKernelInfoArg,
 	occaInnerFor0{
 
 	  // Get thread indices
-	  const int i = occaInnerId0 + occaInnerDim0*occaOuterId0;
-	  const int j = occaInnerId1 + occaInnerDim1*occaOuterId1;
+	  const int i = occaGlobalId0;
+	  const int j = occaGlobalId1;
 	  
 	  if((i < N) && (j < N)){
 	    

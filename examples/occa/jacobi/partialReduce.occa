@@ -9,7 +9,7 @@ occaKernel void partialReduce(occaKernelInfoArg,
     
     occaShared datafloat s_red[BDIM];
 
-#define id  (occaInnerId0+occaInnerDim0*occaOuterId0)
+#define id  occaGlobalId0
 #define tid occaInnerId0
 
     occaInnerFor0{
