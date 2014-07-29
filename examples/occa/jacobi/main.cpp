@@ -5,7 +5,7 @@
 
 #include "occa.hpp"
 
-#define datafloat float
+#define datafloat double
 
 #define BX 16
 #define BY 16
@@ -21,7 +21,7 @@ void solve(int N, datafloat tol, datafloat *h_rhs, datafloat *h_res, datafloat *
   int dev = 2;
 
   occa::device device;
-  device.setup("OpenCL", plat, dev);
+  device.setup("OpenMP", plat, dev);
 
   // build jacobi kernel from source file
   const char *functionName = "";
@@ -39,6 +39,7 @@ void solve(int N, datafloat tol, datafloat *h_rhs, datafloat *h_res, datafloat *
   // build Jacobi kernel
   occa::kernel jacobi = device.buildKernelFromSource("jacobi.occa", "jacobi", flags);
 
+  // set thread array for Jacobi iteration
   {
     int dims = 2;
     occa::dim inner(BX,BY);
@@ -49,6 +50,7 @@ void solve(int N, datafloat tol, datafloat *h_rhs, datafloat *h_res, datafloat *
   // build partial reduction kernel
   occa::kernel partialReduce = device.buildKernelFromSource("partialReduce.occa", "partialReduce", flags);
 
+  // set thread array for partial reduction
   int Nred = ((N+2)*(N+2) + BDIM-1)/BDIM; // number of blocks for partial reduction
   {
     int dims = 1;
@@ -68,6 +70,7 @@ void solve(int N, datafloat tol, datafloat *h_rhs, datafloat *h_res, datafloat *
 
   datafloat res;
 
+  // Jacobi iteration loop
   do {
 
     // Call jacobi [iterationChunk] times before calculating residual
@@ -79,7 +82,7 @@ void solve(int N, datafloat tol, datafloat *h_rhs, datafloat *h_res, datafloat *
 
     }
     
-    // calculate norm(u-u2)
+    // calculate norm(u-u2) with interval iterationChunk iterations
     {
       // design thread array for norm(u-u2)
       int N2 = (N+2)*(N+2);

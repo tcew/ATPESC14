@@ -80,12 +80,15 @@ occaKernel void partialReduce(occaKernelInfoArg,
     }
     
     if(BDIM>1){
-      if(tid<1)
-	s_red[tid] += s_red[tid+1];
+      occaInnerFor0	
+	if(tid<1)		
+	  s_red[tid] += s_red[tid+1];
     }
+
     
     // store result of this block reduction
     if(tid==0)
-      red[occaOuterId0] = s_red[tid];
+      occaInnerFor0	
+	red[occaOuterId0] = s_red[tid];
   }
 }
