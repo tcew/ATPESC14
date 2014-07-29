@@ -21,7 +21,7 @@ void solve(int N, datafloat tol, datafloat *h_rhs, datafloat *h_res, datafloat *
   int dev = 2;
 
   occa::device device;
-  device.setup("OpenMP", plat, dev);
+  device.setup("OpenCL", plat, dev);
 
   // build jacobi kernel from source file
   const char *functionName = "";
