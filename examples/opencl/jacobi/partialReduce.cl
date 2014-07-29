@@ -1,5 +1,3 @@
-#define BDIM 256
-#define datafloat double
 
 __kernel void partialReduce(const int entries,
 			    __global const datafloat *u,

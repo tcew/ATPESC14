@@ -1,10 +1,4 @@
 
-#define BDIM 256
-#define datafloat double
-
-#define BX 16
-#define BY 16
-
 /* 
 
    Poisson problem:               diff(u, x, 2) + diff(u, y, 2) = f

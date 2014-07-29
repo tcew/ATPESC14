@@ -9,7 +9,7 @@
 #include <CL/cl.h>
 #endif
 
-#define datafloat double
+#define datafloat float
 
 #define BX 16
 #define BY 16
@@ -20,7 +20,6 @@ void pfn_notify(const char *errinfo, const void *private_info, size_t cb, void *
 {
   fprintf(stderr, "OpenCL Error (via pfn_notify): %s\n", errinfo);
 }
-
 
 
 char *readFileToString(const char *sourceFileName){
@@ -44,7 +43,7 @@ char *readFileToString(const char *sourceFileName){
 }
 
 cl_kernel buildKernelFromSource(cl_context &context, cl_device_id &device, 
-				const char *sourceFileName, const char *functionName){
+				const char *sourceFileName, const char *functionName, const char *compilerFlags){
 
   cl_int  err;
 
@@ -59,8 +58,7 @@ cl_kernel buildKernelFromSource(cl_context &context, cl_device_id &device,
   }
     
   /* compile and build program */
-  const char *allFlags = " ";
-  err = clBuildProgram(program, 1, &device, allFlags, (void (*)(cl_program, void*))  NULL, NULL);
+  err = clBuildProgram(program, 1, &device, compilerFlags, (void (*)(cl_program, void*))  NULL, NULL);
 
   /* check for compilation errors */
   char *build_log;
@@ -141,11 +139,17 @@ void solve(int N, datafloat tol, datafloat *h_rhs, datafloat *h_res, datafloat *
   // build jacobi kernel from source file
   const char *functionName = "";
 
+  char flags[BUFSIZ];
+  if(sizeof(datafloat)==sizeof(float))
+    sprintf(flags, "-DBX=%d -DBY=%d -DBDIM=%d -Ddatafloat=float", BX, BY, BDIM);
+  if(sizeof(datafloat)==sizeof(double))
+    sprintf(flags, "-DBX=%d -DBY=%d -DBDIM=%d -Ddatafloat=double", BX, BY, BDIM);
+
   // build Jacobi kernel
-  cl_kernel jacobi        = buildKernelFromSource(context, device, "jacobi.cl", "jacobi");
+  cl_kernel jacobi        = buildKernelFromSource(context, device, "jacobi.cl", "jacobi", flags);
 
   // build partial reduction kernel
-  cl_kernel partialReduce = buildKernelFromSource(context, device, "partialReduce.cl", "partialReduce");
+  cl_kernel partialReduce = buildKernelFromSource(context, device, "partialReduce.cl", "partialReduce", flags);
 
   // build Device Arrays and transfer data from host arrays
   size_t sz = (N+2)*(N+2)*sizeof(datafloat);
@@ -217,6 +221,12 @@ void solve(int N, datafloat tol, datafloat *h_rhs, datafloat *h_res, datafloat *
   } while(res > tol);
 
   printf("Residual                   : %7.9e\n"     , res);
+
+  {
+    // blocking copy of solution from device to host 
+    size_t sz = sizeof(datafloat)*(N+2)*(N+2);
+    clEnqueueReadBuffer(queue, c_u, CL_TRUE, 0, sz, h_u, 0, 0, 0);
+  }
 
   // free device arrays
   clReleaseMemObject(c_u);
