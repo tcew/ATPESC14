@@ -8,18 +8,23 @@ using namespace std;
 
 #define datafloat double
 
+#define BX 16
+#define BY 16
+
 /* 
 
-   Poisson problem:  diff(u, x, 2) + diff(u, y, 2) = f
+   Poisson problem:               diff(u, x, 2) + diff(u, y, 2) = f
 
-   Coordinates:      x -> -1 + delta*i, 
-                     y -> -1 + delta*j
+   Coordinate transform:          x -> -1 + delta*i, 
+                                  y -> -1 + delta*j
 
    2nd order finite difference:   4*u(j,i) - u(j-1,i) - u(j+1,i) - u(j,i-1) - u(j,i+1) = -delta*delta*f(j,i) 
 
    define: rhs(j,i) = -delta*delta*f(j,i)
 
    Jacobi iteration: newu(j,i) = 0.25*(u(j-1,i) + u(j+1,i) + u(j,i-1) + u(j,i+1) + rhs(j,i))
+
+   To run with a 402x402 grid until the solution changes less than 1e-7 per iteration (in l2): ./main 400 1e-7  
 
 */
 
@@ -47,11 +52,59 @@ __global__ void jacobi(const int N,
   }
 }
 
+/* CUDA kernel using shared memory */
+__global__ void jacobiShared(const int N,
+			     const datafloat *rhs,
+			     const datafloat *u,
+			     datafloat *newu){
+
+  // Get thread indices
+  const int i = blockIdx.x*blockDim.x + threadIdx.x;
+  const int j = blockIdx.y*blockDim.y + threadIdx.y;
+
+  __shared__ float s_u[BY+2][BX+2];
+
+  // load block of data in to shared memory
+  for(int n=threadIdx.y; n<BY+2; n+=BY){
+    for(int m=threadIdx.x; m<BX+2; m+=BX){
+
+      const int i = blockIdx.x*blockDim.x + m;
+      const int j = blockIdx.y*blockDim.y + n;
+      
+      datafloat val = 0.;
+
+      if(i < N+2 &&  j < N+2)
+        val = u[j*(N+2) + i];
+      
+      s_u[n][m] = val;
+    }
+  }
+
+  // barrier until all the shared memory entries are loaded
+  __syncthreads();
+
+  if((i < N) && (j < N)){
+
+    // Get padded grid ID
+    const int pid = (j + 1)*(N + 2) + (i + 1);
+
+    datafloat invD = 0.25;
+
+    newu[pid] = invD*(rhs[pid]
+		      + s_u[threadIdx.y+0][threadIdx.x+1]
+		      + s_u[threadIdx.y+2][threadIdx.x+1]
+		      + s_u[threadIdx.y+1][threadIdx.x+0]
+		      + s_u[threadIdx.y+1][threadIdx.x+2]
+		      );
+  }
+}
+
+
 __global__ void partialReduceResidual(const int entries,
                                datafloat *u,
                                datafloat *newu,
                                datafloat *red){
-  __shared__ double s_red[BDIM];
+  __shared__ datafloat s_red[BDIM];
 
   const int id = blockIdx.x*blockDim.x + threadIdx.x;
 
@@ -124,48 +177,19 @@ __global__ void partialReduceResidual(const int entries,
     red[blockIdx.x] = s_red[threadIdx.x];
 }
 
-int main(int argc, char** argv){
-
-  if(argc != 3){
-    printf("Usage: ./main N tol \n");
-    return 0;
-  }
-
-  const int N     = atoi(argv[1]);
-  const datafloat tol = atof(argv[2]);
-  datafloat res = 0;
+void solve(int N, datafloat tol, datafloat *h_rhs, datafloat *h_res, datafloat *h_u, datafloat *h_u2 ){
 
   const int iterationChunk = 100; // needs to be multiple of 2
   int iterationsTaken = 0;
-
+  
   // Setup jacobi kernel block-grid sizes
-  dim3 jBlock(16,16);
+  dim3 jBlock(BX,BY);
   dim3 jGrid((N + jBlock.x - 1)/jBlock.x, (N + jBlock.y - 1)/jBlock.y);
 
   // Setup reduceResidual kernel block-grid sizes
   dim3 rBlock(BDIM);
   dim3 rGrid((N*N + rBlock.x - 1)/rBlock.x);
 
-  // Host Arrays
-  datafloat *h_u   = (datafloat*) calloc((N+2)*(N+2), sizeof(datafloat));
-  datafloat *h_u2  = (datafloat*) calloc((N+2)*(N+2), sizeof(datafloat));
-  datafloat *h_rhs = (datafloat*) calloc((N+2)*(N+2), sizeof(datafloat));
-
-  datafloat *h_res = (datafloat*) calloc(rGrid.x, sizeof(datafloat));
-
-  datafloat delta = 2./(N+1);
-  datafloat normRHS = 0;
-  for(int j = 0; j < N+2; ++j){
-    for(int i = 0; i < N+2; ++i){
-      datafloat x = -1 + delta*i;
-      datafloat y = -1 + delta*j;
-
-      h_rhs[i + (N+2)*j] = delta*delta*(2.*M_PI*M_PI*sin(M_PI*x)*sin(M_PI*y));
-      normRHS += pow(h_rhs[i+(N+2)*j],2);
-    }
-  }
-  normRHS = sqrt(normRHS);
-  
   // Device Arrays
   datafloat *c_u, *c_u2, *c_rhs, *c_res;
 
@@ -186,7 +210,12 @@ int main(int argc, char** argv){
   cudaEventCreate(&endEvent);
 
   cudaEventRecord(startEvent, 0);
+
+  datafloat res;
+
   do {
+
+
     // Call jacobi [iterationChunk] times before calculating residual
     for(int i = 0; i < iterationChunk/2; ++i){
 
@@ -225,7 +254,58 @@ int main(int argc, char** argv){
   // Copy final solution from device array to host
   cudaMemcpy(h_u, c_u, (N+2)*(N+2)*sizeof(datafloat), cudaMemcpyDeviceToHost);
 
-  // Compute maximum error in finite difference solution
+  const datafloat avgTimePerIteration = timeTaken/((datafloat) iterationsTaken);
+
+  printf("Residual                   : %7.9e\n"     , res);
+  printf("Iterations                 : %d\n"        , iterationsTaken);
+  printf("Average time per iteration : %3.5e ms\n"  , avgTimePerIteration);
+  printf("Bandwidth                  : %3.5e GB/s\n", (1.0e-6)*(6*N*N*sizeof(datafloat))/avgTimePerIteration);
+
+  // free device arrays
+  cudaFree(c_u);
+  cudaFree(c_u2);
+  cudaFree(c_res);
+  cudaFree(c_rhs);
+
+}
+
+int main(int argc, char** argv){
+
+  // parse command line arguements
+  if(argc != 3){
+    printf("Usage: ./main N tol \n");
+    return 0;
+  }
+
+  // Number of internal domain nodes in each direction
+  const int N     = atoi(argv[1]);
+
+  // Termination criterion || unew - u ||_2 < tol 
+  const datafloat tol = atof(argv[2]);
+
+  // Host Arrays
+  datafloat *h_u   = (datafloat*) calloc((N+2)*(N+2), sizeof(datafloat));
+  datafloat *h_u2  = (datafloat*) calloc((N+2)*(N+2), sizeof(datafloat));
+  datafloat *h_rhs = (datafloat*) calloc((N+2)*(N+2), sizeof(datafloat));
+  datafloat *h_res = (datafloat*) calloc((N+2)*(N+2), sizeof(datafloat));
+
+  // FD node spacing
+  datafloat delta = 2./(N+1);
+
+  for(int j = 0; j < N+2; ++j){
+    for(int i = 0; i < N+2; ++i){
+      datafloat x = -1 + delta*i;
+      datafloat y = -1 + delta*j;
+
+      // solution is u = sin(pi*x)*sin(pi*y) so the rhs is: 
+      h_rhs[i + (N+2)*j] = delta*delta*(2.*M_PI*M_PI*sin(M_PI*x)*sin(M_PI*y));
+    }
+  }
+
+  // Solve discrete Laplacian
+  solve(N, tol, h_rhs, h_res, h_u, h_u2);
+
+  // Compute maximum error in finite difference solution and output solution
   FILE *fp = fopen("result.dat", "w");
   datafloat maxError = 0;
   for(int j = 0; j < N+2; ++j){
@@ -239,21 +319,11 @@ int main(int argc, char** argv){
   }
   fclose(fp);
 
-  const datafloat avgTimePerIteration = timeTaken/((datafloat) iterationsTaken);
-
-  printf("Top right current          : %7.9e\n"     , h_u[N*(N+2) + N]);
-  printf("Residual                   : %7.9e\n"     , res);
-  printf("Iterations                 : %d\n"        , iterationsTaken);
-  printf("Average time per iteration : %3.5e ms\n"  , avgTimePerIteration);
-  printf("Bandwidth                  : %3.5e GB/s\n", (1.0e-6)*(6*N*N*sizeof(datafloat))/avgTimePerIteration);
   printf("Maximum absolute error     : %7.9e\n"     ,  maxError);
 
   // Free all the mess
-  cudaFree(c_u);
-  cudaFree(c_u2);
-  cudaFree(c_res);
-
   free(h_u);
   free(h_u2);
   free(h_res);
+  free(h_rhs);
 }
