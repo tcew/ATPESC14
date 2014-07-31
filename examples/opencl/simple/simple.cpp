@@ -59,8 +59,8 @@ int main(int argc, char **argv){
   
 #if 0
   // build kernel function
-  const char *sourceFileName = "foo.cl";
-  const char *functionName = "foo";
+  const char *sourceFileName = "simple.cl";
+  const char *functionName = "simple";
 
   // read in text from source file
 
@@ -80,7 +80,7 @@ int main(int argc, char **argv){
 #else
   
   const char *source =
-    "__kernel void foo(int N, __global float *x){"
+    "__kernel void simple(int N, __global float *x){"
     "                                            "
     "     int id = get_global_id(0);             "
     "                                            "
