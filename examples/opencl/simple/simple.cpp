@@ -16,7 +16,7 @@ void pfn_notify(const char *errinfo, const void *private_info, size_t cb, void *
 int main(int argc, char **argv){
 
   int plat = 0;
-  int dev  = 1;
+  int dev  = 0;
 
   /* set up CL */
   cl_int            err;
@@ -57,7 +57,7 @@ int main(int argc, char **argv){
   // create command queue
   queue   = clCreateCommandQueue(context, device, CL_QUEUE_PROFILING_ENABLE, &err);
   
-#if 0
+#if 1
   // build kernel function
   const char *sourceFileName = "simple.cl";
   const char *functionName = "simple";
