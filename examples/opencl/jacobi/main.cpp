@@ -106,7 +106,7 @@ void solve(int N, datafloat tol, datafloat *h_rhs, datafloat *h_res, datafloat *
 
   /* hard code platform and device number */
   int plat = 0;
-  int dev = 2;
+  int dev = 0;
 
   /* get list of platform IDs (platform == implementation of OpenCL) */
   clGetPlatformIDs(100, platforms, &platforms_n);
