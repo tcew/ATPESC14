@@ -29,13 +29,15 @@ int main(int argc, char **argv){
   occa::dim outer((N+T-1)/T);
   simple.setWorkingDims(dims, inner, outer);
 
+
+  size_t sz = N*sizeof(float);
+
   // allocate array on HOST
   float *h_x = (float*) malloc(sz);
   for(int n=0;n<N;++n)
     h_x[n] = 123;
   
   // allocate array on DEVICE (copy from HOST)
-  size_t sz = T*sizeof(float);
   occa::memory c_x = device.malloc(sz, h_x);
 
   // queue kernel
