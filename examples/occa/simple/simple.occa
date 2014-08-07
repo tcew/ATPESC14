@@ -1,5 +1,6 @@
 
-occaKernel void simple(int occaVariable N, occaPointer float *x){
+occaKernel void simple(occaKernelInfoArg, 
+	   int occaVariable N, occaPointer float *x){
 
   occaOuterFor0{
     occaInnerFor0{
