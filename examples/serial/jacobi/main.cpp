@@ -37,16 +37,14 @@ void jacobi(const int N,
   for(int i=0;i<N;++i){
     for(int j=0;j<N;++j){
 
-      // Get padded grid ID
-      const int pid = (j + 1)*(N + 2) + (i + 1);
+      // Get linear index into NxN inner nodes of (N+2)x(N+2) grid
+      const int id = (j + 1)*(N + 2) + (i + 1);
       
-      datafloat invD = 0.25;
-      
-      newu[pid] = invD*(rhs[pid]
-			+ u[pid - (N+2)]
-			+ u[pid + (N+2)]
-			+ u[pid - 1]
-			+ u[pid + 1]);
+      newu[id] = 0.25f*(rhs[id]
+			+ u[id - (N+2)]
+			+ u[id + (N+2)]
+			+ u[id - 1]
+			+ u[id + 1]);
     }
   }
 }

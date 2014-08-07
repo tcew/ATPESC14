@@ -19,7 +19,7 @@
 __kernel void jacobi(const int N,
                      __global const datafloat *rhs,
                      __global const datafloat *u,
-                     __global  datafloat *newu){
+                     __global datafloat *newu){
 
   // Get thread indices
   const int i = get_global_id(0);
@@ -27,15 +27,13 @@ __kernel void jacobi(const int N,
 
   if((i < N) && (j < N)){
 
-    // Get padded grid ID
-    const int pid = (j + 1)*(N + 2) + (i + 1);
+    // Get linear index into interior of (N+2)x(N+2) grid
+    const int id = (j + 1)*(N + 2) + (i + 1);
 
-    datafloat invD = 0.25;
-
-    newu[pid] = invD*(rhs[pid]
-		      + u[pid - (N+2)]
-		      + u[pid + (N+2)]
-		      + u[pid - 1]
-		      + u[pid + 1]);
+    newu[id] = 0.25f*(rhs[id]
+		      + u[id - (N+2)]
+		      + u[id + (N+2)]
+		      + u[id - 1]
+		      + u[id + 1]);
   }
 }

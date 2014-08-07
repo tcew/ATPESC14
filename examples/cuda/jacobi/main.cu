@@ -1,4 +1,5 @@
 #include <iostream>
+#include <stdio.h>
 #include <cuda.h>
 #include <math.h>
 
