@@ -44,7 +44,7 @@ int main(int argc, char **argv){
   simple(N, c_x);
   
   // copy result to HOST
-  c_x.toHost(h_x);
+  c_x.copyTo(h_x);
   
   /* print out results */
   for(int n=0;n<N;++n)
